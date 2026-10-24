@@ -167,6 +167,35 @@ export function countDaysInRange(start: Date, end: Date, skipWeekends: boolean):
   return daysBetween(start, end).filter((d) => !skipWeekends || !isWeekend(d)).length
 }
 
+/** Dịch con trỏ theo đơn vị của chế độ xem: tháng / tuần / ngày. */
+export function shiftCursor(
+  cursor: Date,
+  view: 'month' | 'week' | 'day',
+  delta: number,
+): Date {
+  if (view === 'week') return addDays(cursor, delta * 7)
+  if (view === 'day') return addDays(cursor, delta)
+  return addMonths(cursor, delta)
+}
+
+/** Tiêu đề thanh công cụ theo chế độ xem đang chọn. */
+export function formatCursorTitle(
+  cursor: Date,
+  view: 'month' | 'week' | 'day',
+  weekStart = 1,
+): string {
+  const locale = currentDateLocale()
+  if (view === 'month') return formatMonthYear(cursor)
+
+  if (view === 'day') {
+    return format(cursor, t('calendar.formats.fullDate'), { locale })
+  }
+
+  // Tuần: "13/10 – 19/10/2026"; vắt qua hai tháng sẽ hiện đủ hai bên.
+  const days = weekDays(cursor, weekStart)
+  return formatRangeLabel(days[0], days[6])
+}
+
 /** Nhãn khoảng ngày cho popup tạo hàng loạt: "19/10 – 25/10/2026". */
 export function formatRangeLabel(start: Date, end: Date): string {
   const locale = currentDateLocale()
@@ -185,3 +214,18 @@ export function formatRangeLabel(start: Date, end: Date): string {
 }
 
 export { addDays, addMonths, isSameDay, isSameMonth, isToday, isWeekend, startOfMonth }
+/** `HH:mm(:ss)` -> số phút tính từ nửa đêm. Không hợp lệ thì trả null. */
+export function timeToMinutes(value: TimeString | null | undefined): number | null {
+  if (!value) return null
+  const [h, m] = value.split(':')
+  const hours = Number(h)
+  const minutes = Number(m)
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null
+  return hours * 60 + minutes
+}
+
+/** Nhãn giờ trên cột trái của timeline: "3 PM" / "15:00" theo ngôn ngữ. */
+export function formatHourLabel(hour: number): string {
+  const date = new Date(2000, 0, 1, hour, 0, 0)
+  return format(date, t('calendar.formats.hour'), { locale: currentDateLocale() })
+}

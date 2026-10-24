@@ -53,7 +53,15 @@
     "pickMonthYear": "Pick month and year",
     "monthLabel": "{{month}}",
     "yearLabel": "{{year}}",
-    "weekdaysShort": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "weekdaysShort": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat",
+      "Sun"
+    ],
     "weekdaysLong": [
       "Monday",
       "Tuesday",
@@ -71,13 +79,16 @@
       "dayMonthLong": "MMM d",
       "rangeShort": "M/d – M/d/yyyy",
       "rangeSameMonth": "M/d – M/d",
-      "time": "h:mm a"
+      "time": "h:mm a",
+      "hour": "h a"
     },
     "filter": "Calendars",
     "filterTitle": "Show / hide calendars",
     "defaultBadge": "Default",
     "hidden": "Hidden",
-    "legendMore": "and {{count}} more"
+    "legendMore": "and {{count}} more",
+    "allDayRow": "All day",
+    "timezoneLabel": "GMT+7"
   },
   "event": {
     "newTitle": "New event",
@@ -156,7 +167,8 @@
     "eventCount": "{{count}} items",
     "hintClick": "Tap to view",
     "hintHold": "Press and hold to add",
-    "hintDrag": "Drag to select days"
+    "hintDrag": "Drag to select days",
+    "timelineHint": "Click or drag a time range to add an event"
   },
   "search": {
     "title": "Search",

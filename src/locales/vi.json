@@ -53,7 +53,15 @@
     "pickMonthYear": "Chọn tháng và năm",
     "monthLabel": "Tháng {{month}}",
     "yearLabel": "Năm {{year}}",
-    "weekdaysShort": ["T2", "T3", "T4", "T5", "T6", "T7", "CN"],
+    "weekdaysShort": [
+      "T2",
+      "T3",
+      "T4",
+      "T5",
+      "T6",
+      "T7",
+      "CN"
+    ],
     "weekdaysLong": [
       "Thứ Hai",
       "Thứ Ba",
@@ -71,13 +79,16 @@
       "dayMonthLong": "d 'tháng' M",
       "rangeShort": "d/M – d/M/yyyy",
       "rangeSameMonth": "d/M – d/M",
-      "time": "HH:mm"
+      "time": "HH:mm",
+      "hour": "HH:mm"
     },
     "filter": "Lịch",
     "filterTitle": "Hiện / ẩn lịch con",
     "defaultBadge": "Mặc định",
     "hidden": "Đang ẩn",
-    "legendMore": "và {{count}} mục khác"
+    "legendMore": "và {{count}} mục khác",
+    "allDayRow": "Cả ngày",
+    "timezoneLabel": "GMT+7"
   },
   "event": {
     "newTitle": "Lịch mới",
@@ -156,7 +167,8 @@
     "eventCount": "{{count}} mục",
     "hintClick": "Chạm để xem",
     "hintHold": "Ấn giữ để thêm lịch",
-    "hintDrag": "Kéo để chọn nhiều ngày"
+    "hintDrag": "Kéo để chọn nhiều ngày",
+    "timelineHint": "Bấm hoặc kéo chọn khoảng giờ để thêm lịch"
   },
   "search": {
     "title": "Tìm kiếm",

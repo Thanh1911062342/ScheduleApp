@@ -1,12 +1,18 @@
 /**
  * Chế độ xem Tuần.
  *
- * PC: lưới 7 cột theo giờ. Mobile: danh sách agenda theo ngày (lưới theo giờ
- * không dùng được trên màn hình hẹp).
+ * PC: lưới giờ 24h với 7 cột ngày (chung `TimeGrid` với chế độ Ngày) —
+ * cùng kiểu Google Calendar: tiêu đề thứ/ngày, dải sự kiện cả ngày,
+ * khối sự kiện đặt đúng vị trí theo giờ; bấm hoặc ấn-giữ-kéo trên ô trống
+ * để tạo lịch nhanh theo khung giờ.
+ * Mobile: danh sách agenda theo ngày (lưới theo giờ không dùng được
+ * trên màn hình hẹp).
  */
 
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { TimeGrid, type TimeGridColumn } from '@/components/calendar/TimeGrid'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/cn'
 import { formatTime, toDateString, weekDays, weekdayLongLabel } from '@/lib/date'
@@ -19,6 +25,8 @@ interface WeekViewProps {
   onOpenDay: (date: string) => void
   onOpenEvent: (occurrence: Occurrence) => void
   onAddForDay: (date: string) => void
+  /** Mở form tạo lịch cho khoảng giờ đã bấm/kéo trên lưới tuần. */
+  onCreateRange?: (date: string, startMinutes: number, endMinutes: number) => void
 }
 
 export function WeekView({
@@ -28,100 +36,67 @@ export function WeekView({
   onOpenDay,
   onOpenEvent,
   onAddForDay,
+  onCreateRange,
 }: WeekViewProps) {
   const { t } = useTranslation()
   const days = weekDays(cursor, weekStart)
   const today = toDateString(new Date())
 
+  const columns = useMemo<TimeGridColumn[]>(
+    () =>
+      days.map((day, index) => {
+        const dateString = toDateString(day)
+        const isToday = dateString === today
+        return {
+          dateString,
+          occurrences: occurrencesByDate.get(dateString) ?? [],
+          isToday,
+          header: (
+            <button
+              type="button"
+              onClick={() => onOpenDay(dateString)}
+              title={t('day.hintClick')}
+              className="flex w-full flex-col items-center gap-0.5 px-1 py-1.5 transition-colors hover:bg-[var(--color-paper-sunken)]"
+            >
+              <span
+                className={cn(
+                  'block text-[10px] font-medium tracking-[0.08em] uppercase',
+                  isToday ? 'text-[var(--color-accent)]' : 'text-[var(--color-ink-soft)]',
+                )}
+              >
+                {weekdayLongLabel(weekStart, index)}
+              </span>
+              <span
+                className={cn(
+                  'tnum flex h-8 w-8 items-center justify-center rounded-full text-lg font-medium leading-none',
+                  isToday
+                    ? 'bg-[var(--color-accent)] text-white'
+                    : 'text-[var(--color-ink)]',
+                )}
+              >
+                {day.getDate()}
+              </span>
+            </button>
+          ),
+        }
+      }),
+    // today/weekStart ít đổi; occurrencesByDate đổi khi refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [days, occurrencesByDate, today, weekStart, onOpenDay, t],
+  )
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* PC: cột theo ngày */}
-      <div className="scroll-thin hidden min-h-0 flex-1 overflow-y-auto md:block">
-        <div className="grid min-h-full grid-cols-7 border-l border-[var(--color-rule)]">
-          {days.map((day, index) => {
-            const dateString = toDateString(day)
-            const items = occurrencesByDate.get(dateString) ?? []
-            const isToday = dateString === today
-
-            return (
-              <div
-                key={dateString}
-                className="flex min-h-full flex-col border-r border-[var(--color-rule)]"
-              >
-                <button
-                  type="button"
-                  onClick={() => onOpenDay(dateString)}
-                  className={cn(
-                    'sticky top-0 z-10 shrink-0 border-b border-[var(--color-rule)] px-2 py-2 text-center transition-colors',
-                    isToday ? 'bg-[var(--color-ink)]' : 'bg-[var(--color-paper)] hover:bg-[var(--color-paper-sunken)]',
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'block text-micro',
-                      isToday ? 'text-[var(--color-paper)]' : 'text-[var(--color-ink-faint)]',
-                    )}
-                  >
-                    {weekdayLongLabel(weekStart, index)}
-                  </span>
-                  <span
-                    className={cn(
-                      'tnum block font-serif text-base font-semibold',
-                      isToday ? 'text-[var(--color-paper)]' : 'text-[var(--color-ink)]',
-                    )}
-                  >
-                    {day.getDate()}
-                  </span>
-                </button>
-
-                <div className="flex flex-1 flex-col gap-1 p-1.5">
-                  {items.length === 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => onAddForDay(dateString)}
-                      className="flex flex-1 items-start justify-center rounded-[6px] py-3 text-micro text-[var(--color-ink-faint)] transition-colors hover:bg-[var(--color-paper-sunken)]"
-                    >
-                      +
-                    </button>
-                  ) : (
-                    items.map((occ) => (
-                      <button
-                        key={occ.occurrence_key}
-                        type="button"
-                        onClick={() => onOpenEvent(occ)}
-                        className="flex flex-col gap-0.5 rounded-[6px] border border-[var(--color-rule)] px-1.5 py-1 text-left transition-colors hover:bg-[var(--color-paper-sunken)]"
-                        style={{
-                          borderLeftWidth: 3,
-                          borderLeftColor: occ.color ?? occ.calendar.color,
-                        }}
-                      >
-                        <span
-                          className={cn(
-                            'truncate text-micro font-medium text-[var(--color-ink)]',
-                            occ.status === 'done' && 'line-through opacity-60',
-                          )}
-                        >
-                          {occ.title}
-                        </span>
-                        {!occ.is_all_day && occ.start_time ? (
-                          <span className="tnum text-[10px] text-[var(--color-ink-faint)]">
-                            {formatTime(occ.start_time)}
-                            {occ.end_time ? ` – ${formatTime(occ.end_time)}` : ''}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-[var(--color-ink-faint)]">
-                            {t('event.allDay')}
-                          </span>
-                        )}
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
+      {/* PC: lưới giờ 7 cột */}
+      <TimeGrid
+        columns={columns}
+        onOpenEvent={onOpenEvent}
+        onCreateRange={(date, start, end) => {
+          if (onCreateRange) onCreateRange(date, start, end)
+          else onAddForDay(date)
+        }}
+        className="hidden min-h-0 flex-1 border-l border-[var(--color-rule)] md:flex"
+      />
 
       {/* Mobile: agenda theo ngày */}
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto md:hidden">

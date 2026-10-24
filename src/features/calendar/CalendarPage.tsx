@@ -42,6 +42,7 @@ export function CalendarPage() {
     closeDraft,
     openEdit,
     openCreate,
+    openCreateRange,
     setSelection,
     setSearchOpen,
     syncCalendars,
@@ -84,7 +85,7 @@ export function CalendarPage() {
       end: toDateString(dateWindow.end),
       calendarIds: calendars.length > 0 ? visibleIds : undefined,
     }
-  }, [window, calendars, hiddenCalendarIds])
+  }, [dateWindow, calendars, hiddenCalendarIds])
 
   const occurrencesQuery = useOccurrences(query, calendars.length > 0)
   const occurrencesByDate = useOccurrencesByDate(
@@ -174,6 +175,7 @@ export function CalendarPage() {
               onOpenDay={openDay}
               onOpenEvent={openEdit}
               onAddForDay={openCreate}
+              onCreateRange={openCreateRange}
             />
           ) : (
             <DayView
@@ -181,6 +183,7 @@ export function CalendarPage() {
               occurrencesByDate={occurrencesByDate}
               onOpenEvent={openEdit}
               onAddForDay={openCreate}
+              onCreateRange={openCreateRange}
             />
           )}
         </main>

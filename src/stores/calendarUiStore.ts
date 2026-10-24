@@ -45,6 +45,8 @@ interface CalendarUiState {
   // Popup tạo/sửa sự kiện
   draft: EventDraft | null
   openCreate: (date: DateString) => void
+  /** Tạo lịch vào đúng khung giờ — dùng khi bấm/kéo trên lưới giờ timeline. */
+  openCreateRange: (date: DateString, startMinutes: number, endMinutes: number) => void
   openEdit: (occurrence: Occurrence) => void
   closeDraft: () => void
 
@@ -120,6 +122,29 @@ export const useCalendarUi = create<CalendarUiState>((set, get) => ({
       selectedDate: null,
       selection: null,
     }),
+  openCreateRange: (date, startMinutes, endMinutes) => {
+    // Đổi phút -> chuỗi HH:mm. Khoảng kéo chạm cuối ngày (1440) thì coi
+    // như sự kiện chạy qua nửa đêm: end 23:59 để form hiển thị hợp lý.
+    const toHHmm = (minutes: number) => {
+      const clamped = Math.max(0, Math.min(minutes, 24 * 60 - 1))
+      const h = Math.floor(clamped / 60)
+      const m = clamped % 60
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+    }
+    const safeEnd = endMinutes > startMinutes ? endMinutes : startMinutes + 60
+    set({
+      draft: {
+        startDate: date,
+        endDate: date,
+        isAllDay: false,
+        startTime: toHHmm(startMinutes),
+        endTime: toHHmm(safeEnd),
+        editing: null,
+      },
+      selectedDate: null,
+      selection: null,
+    })
+  },
   openEdit: (occurrence) =>
     set({
       draft: {

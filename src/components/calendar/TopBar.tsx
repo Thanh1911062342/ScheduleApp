@@ -10,7 +10,7 @@ import { ChevronIcon, MonthYearPicker } from '@/components/calendar/MonthYearPic
 import { Button } from '@/components/ui/Button'
 import { SegmentedControl } from '@/components/ui/Field'
 import { cn } from '@/lib/cn'
-import { addMonths, formatMonthYear } from '@/lib/date'
+import { formatCursorTitle, shiftCursor } from '@/lib/date'
 import { useAuthStore } from '@/stores/authStore'
 import { useCalendarUi, type ViewMode } from '@/stores/calendarUiStore'
 import type { Calendar } from '@/types'
@@ -28,18 +28,21 @@ export function TopBar({ calendars }: TopBarProps) {
   const logout = useAuthStore((s) => s.logout)
   const setSearchOpen = useCalendarUi((s) => s.setSearchOpen)
 
+  const weekStart = user?.week_start ?? 1
+  const title = formatCursorTitle(cursor, view, weekStart)
+
   const [pickerOpen, setPickerOpen] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
     <header className="relative flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--color-rule)] bg-[var(--color-paper)] px-3 py-2.5">
-      {/* Điều hướng tháng */}
+      {/* Điều hướng — đơn vị theo chế độ xem: tháng / tuần / ngày */}
       <div className="relative flex items-center gap-1">
         <Button
           size="icon"
           variant="ghost"
-          onClick={() => setCursor(addMonths(cursor, -1))}
+          onClick={() => setCursor(shiftCursor(cursor, view, -1))}
           aria-label={t('calendar.previous')}
         >
           <ChevronIcon direction="left" />
@@ -52,15 +55,16 @@ export function TopBar({ calendars }: TopBarProps) {
           className={cn(
             'min-w-[9rem] rounded-[var(--radius-note)] px-2 py-1 font-serif text-sm font-semibold',
             'text-[var(--color-ink)] transition-colors hover:bg-[var(--color-paper-sunken)]',
+            view !== 'month' && 'min-w-[11rem] text-mini sm:text-sm',
           )}
         >
-          {formatMonthYear(cursor)}
+          {title}
         </button>
 
         <Button
           size="icon"
           variant="ghost"
-          onClick={() => setCursor(addMonths(cursor, 1))}
+          onClick={() => setCursor(shiftCursor(cursor, view, 1))}
           aria-label={t('calendar.next')}
         >
           <ChevronIcon direction="right" />
