@@ -1,0 +1,190 @@
+@import 'tailwindcss';
+
+/* Tailwind v4: khai báo dark mode theo class thay vì chỉ theo hệ thống,
+   để user chọn được trong Cài đặt. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* --------------------------------------------------------------------------
+   Design token — phong cách "quyển note": giấy ấm, đường kẻ mảnh, viền 1px
+   thay vì đổ bóng, không gradient.
+   -------------------------------------------------------------------------- */
+@theme {
+  --color-paper: #fdfcf8;
+  --color-paper-raised: #ffffff;
+  --color-paper-sunken: #f6f3ea;
+  --color-ink: #2b2925;
+  --color-ink-soft: #6b6862;
+  --color-ink-faint: #9c9890;
+  --color-rule: #e8e4da;
+  --color-rule-strong: #d6d0c2;
+
+  --color-accent: #3b82f6;
+  --color-accent-soft: #eff6ff;
+  --color-danger: #dc2626;
+
+  --font-serif: 'Lora', 'Newsreader', Georgia, serif;
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --radius-note: 8px;
+
+  --text-micro: 0.6875rem;
+  --text-mini: 0.75rem;
+}
+
+/* Bảng màu lịch con — 8 màu dịu, không neon. */
+@theme {
+  --color-cal-1: #3b82f6;
+  --color-cal-2: #10b981;
+  --color-cal-3: #f59e0b;
+  --color-cal-4: #ef4444;
+  --color-cal-5: #8b5cf6;
+  --color-cal-6: #ec4899;
+  --color-cal-7: #14b8a6;
+  --color-cal-8: #78716c;
+}
+
+/* Nền tối: giấy đen ấm, không đen tuyền. */
+.dark {
+  --color-paper: #1c1b18;
+  --color-paper-raised: #262521;
+  --color-paper-sunken: #161513;
+  --color-ink: #ebe8e0;
+  --color-ink-soft: #a8a49a;
+  --color-ink-faint: #767268;
+  --color-rule: #35332d;
+  --color-rule-strong: #474438;
+  --color-accent-soft: #1e293b;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-rule);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv02', 'cv03', 'cv04';
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Số ngày dùng chữ số đều bề rộng để lưới không nhảy. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  /* Tôn trọng lựa chọn giảm chuyển động của hệ điều hành. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Lưới lịch: tắt cử chỉ cuộn/zoom mặc định của trình duyệt.
+     THIẾU DÒNG NÀY thì kéo chọn khoảng ngày trên mobile sẽ cuộn trang
+     và sự kiện pointermove bị nuốt. */
+  .touch-none-grid {
+    touch-action: none;
+  }
+
+  .no-select {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Phản hồi khi ấn-giữ: thu nhỏ rồi bật lại. */
+  @keyframes note-press {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(0.96);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  .animate-press {
+    animation: note-press 140ms ease-out;
+  }
+
+  @keyframes note-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in {
+    animation: note-fade-in 140ms ease-out;
+  }
+
+  @keyframes note-sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes note-scrim-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .animate-sheet-up {
+    animation: note-sheet-up 180ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .animate-scrim-in {
+    animation: note-scrim-in 160ms ease-out;
+  }
+
+  /* Thanh cuộn mảnh cho khớp phong cách giấy. */
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-rule-strong) transparent;
+  }
+
+  .scroll-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background-color: var(--color-rule-strong);
+    border-radius: 4px;
+  }
+
+  .scroll-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
