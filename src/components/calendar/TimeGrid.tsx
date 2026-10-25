@@ -7,9 +7,15 @@
  *  - Ấn-giữ rồi KÉO từ ô này sang ô khác (ví dụ 8 AM xuống 12 PM)
  *    -> mở form với đúng khung giờ đã kéo, không phải chỉnh tay trong form.
  *
+ * Zoom (chỉ bật khi truyền `onZoomChange`):
+ *  - Mức to nhất = 52px/giờ (kích thước mặc định ban đầu).
+ *  - Mức nhỏ nhất = vừa khít để nhìn trọn 24h trong khung hiện tại,
+ *    giúp xem toàn cảnh lịch trình một ngày/tuần.
+ *  - Nút +/- nổi ở góc phải; sidebar ngày (DayPanel) không dùng zoom.
+ *
  * Căn chỉnh:
  *  - Tiêu đề cột + dải "Cả ngày" nằm TRONG cùng vùng cuộn và sticky,
- *    nên luôn thẳng hàng tuyệt đối với cột lưới bên dưới (không bị lệch
+ *    nên luôn thẳng hàng tuyệt đối với cột lưới bên dưới (không lệch
  *    do thanh cuộn).
  *  - Nhãn giờ nằm đúng tâm của đường kẻ giờ (translate -50%).
  *  - Có vạch mờ ở mốc 30 phút và đường đỏ "bây giờ" cho ngày hôm nay.
@@ -23,11 +29,14 @@ import { cn } from '@/lib/cn'
 import { formatTime, timeToMinutes } from '@/lib/date'
 import type { Occurrence } from '@/types'
 
-export const HOUR_HEIGHT = 52
+const MAX_HOUR_HEIGHT = 52
 const TOTAL_HOURS = 24
 const SNAP_MINUTES = 30
 const MIN_BLOCK_MINUTES = 25
 const GUTTER_WIDTH = 56
+/** Chiều cao tối thiểu tuyệt đối của một giờ để khối vẫn bấm được. */
+const FLOOR_HOUR_HEIGHT = 16
+const ZOOM_STEP = 0.25
 
 export interface TimeGridColumn {
   dateString: string
@@ -41,6 +50,10 @@ interface TimeGridProps {
   columns: TimeGridColumn[]
   onOpenEvent: (occurrence: Occurrence) => void
   onCreateRange: (dateString: string, startMinutes: number, endMinutes: number) => void
+  /** Mức zoom 0 (thu nhỏ tối đa) .. 1 (kích thước mặc định). Mặc định 1. */
+  zoom?: number
+  /** Có mặt thì bật nút zoom; bỏ trống (sidebar ngày) thì không hiện. */
+  onZoomChange?: (zoom: number) => void
   className?: string
 }
 
@@ -64,15 +77,23 @@ interface DragState {
   currentMinutes: number
 }
 
+function clampZoom(zoom: number): number {
+  return Math.min(1, Math.max(0, zoom))
+}
+
 function snapMinutes(rawMinutes: number): number {
   const snapped = Math.round(rawMinutes / SNAP_MINUTES) * SNAP_MINUTES
   return Math.min(TOTAL_HOURS * 60, Math.max(0, snapped))
 }
 
-function minutesFromPointer(event: React.PointerEvent, element: HTMLElement): number {
+function minutesFromPointer(
+  event: React.PointerEvent,
+  element: HTMLElement,
+  hourHeight: number,
+): number {
   const rect = element.getBoundingClientRect()
   const y = event.clientY - rect.top
-  return snapMinutes((y / HOUR_HEIGHT) * 60)
+  return snapMinutes((y / hourHeight) * 60)
 }
 
 function minutesToLabel(minutes: number): string {
@@ -81,7 +102,7 @@ function minutesToLabel(minutes: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
-function splitOccurrences(occurrences: Occurrence[]): {
+function splitOccurrences(occurrences: Occurrence[], hourHeight: number): {
   allDay: Occurrence[]
   timed: TimedBlock[]
 } {
@@ -112,8 +133,8 @@ function splitOccurrences(occurrences: Occurrence[]): {
       occurrence: occ,
       startMinutes,
       endMinutes,
-      top: (startMinutes / 60) * HOUR_HEIGHT,
-      height: (Math.max(MIN_BLOCK_MINUTES, endMinutes - startMinutes) / 60) * HOUR_HEIGHT,
+      top: (startMinutes / 60) * hourHeight,
+      height: (Math.max(MIN_BLOCK_MINUTES, endMinutes - startMinutes) / 60) * hourHeight,
     })
   }
 
@@ -161,10 +182,22 @@ function placeBlocks(blocks: TimedBlock[]): PlacedBlock[] {
   return placed
 }
 
-export function TimeGrid({ columns, onOpenEvent, onCreateRange, className }: TimeGridProps) {
+export function TimeGrid({
+  columns,
+  onOpenEvent,
+  onCreateRange,
+  zoom = 1,
+  onZoomChange,
+  className,
+}: TimeGridProps) {
   const { t } = useTranslation()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const headerRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
+
+  // Đo chiều cao khung nhìn + header để tính mức zoom nhỏ nhất (trọn 24h).
+  const [viewportH, setViewportH] = useState(0)
+  const [headerH, setHeaderH] = useState(0)
 
   // "Bây giờ" — cập nhật mỗi phút để đường đỏ chỉ giờ hiện tại chạy đúng.
   const [now, setNow] = useState(() => new Date())
@@ -174,13 +207,33 @@ export function TimeGrid({ columns, onOpenEvent, onCreateRange, className }: Tim
   }, [])
   const nowMinutes = now.getHours() * 60 + now.getMinutes()
 
+  // Chiều cao một giờ theo mức zoom hiện tại.
+  const hourHeight = useMemo(
+    () => computeHourHeight(viewportH, headerH, zoom),
+    [viewportH, headerH, zoom],
+  )
+
+  // Khối sự kiện phải dùng đúng hourHeight sau khi đã đo khung.
   const columnData = useMemo(
-    () => columns.map((col) => ({ ...col, ...splitOccurrences(col.occurrences) })),
-    [columns],
+    () => columns.map((col) => ({ ...col, ...splitOccurrences(col.occurrences, hourHeight) })),
+    [columns, hourHeight],
   )
 
   const hasHeaders = columns.some((c) => c.header != null)
   const hasAllDay = columnData.some((c) => c.allDay.length > 0)
+
+  // Đo lại khi khung/header đổi kích thước (đổi zoom, resize cửa sổ, mở panel).
+  useEffect(() => {
+    function measure() {
+      if (scrollRef.current) setViewportH(scrollRef.current.clientHeight)
+      if (headerRef.current) setHeaderH(headerRef.current.offsetHeight)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    if (scrollRef.current) ro.observe(scrollRef.current)
+    if (headerRef.current) ro.observe(headerRef.current)
+    return () => ro.disconnect()
+  }, [hasHeaders, hasAllDay])
 
   // Nhãn GMT suy ra từ múi giờ trình duyệt.
   const gmtLabel = useMemo(() => {
@@ -199,18 +252,17 @@ export function TimeGrid({ columns, onOpenEvent, onCreateRange, className }: Tim
   useEffect(() => {
     if (!scrollRef.current) return
     const tops = columnData.flatMap((c) => c.timed.map((b) => b.top))
-    const target = tops.length > 0 ? Math.min(...tops) : 7 * HOUR_HEIGHT
-    scrollRef.current.scrollTop = Math.max(0, target - HOUR_HEIGHT)
-    // Chỉ cuộn khi đổi nhóm ngày, không cuộn lại mỗi lần dữ liệu refetch.
+    const target = tops.length > 0 ? Math.min(...tops) : 7 * hourHeight
+    scrollRef.current.scrollTop = Math.max(0, target - hourHeight)
+    // Chỉ cuộn khi đổi nhóm ngày, không cuộn lại mỗi lần refetch/zoom.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columnsKey])
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>, dateString: string) {
-    // Không bắt đầu kéo khi bấm lên khối sự kiện.
     if ((event.target as HTMLElement).closest('[data-event-block]')) return
     if (event.pointerType === 'mouse' && event.button !== 0) return
 
-    const minutes = minutesFromPointer(event, event.currentTarget)
+    const minutes = minutesFromPointer(event, event.currentTarget, hourHeight)
     try {
       event.currentTarget.setPointerCapture(event.pointerId)
     } catch {
@@ -221,7 +273,7 @@ export function TimeGrid({ columns, onOpenEvent, onCreateRange, className }: Tim
 
   function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
     if (!drag) return
-    const minutes = minutesFromPointer(event, event.currentTarget)
+    const minutes = minutesFromPointer(event, event.currentTarget, hourHeight)
     setDrag((prev) => (prev ? { ...prev, currentMinutes: minutes } : prev))
   }
 
@@ -239,10 +291,8 @@ export function TimeGrid({ columns, onOpenEvent, onCreateRange, className }: Tim
     const high = Math.max(startMinutes, currentMinutes)
 
     if (high - low < SNAP_MINUTES) {
-      // Bấm thường: sự kiện 1 tiếng từ ô đã bấm.
       onCreateRange(dateString, low, Math.min(low + 60, TOTAL_HOURS * 60))
     } else {
-      // Kéo chọn khoảng: dùng đúng khoảng đã kéo.
       onCreateRange(dateString, low, high)
     }
   }
@@ -250,11 +300,31 @@ export function TimeGrid({ columns, onOpenEvent, onCreateRange, className }: Tim
   const hours = useMemo(() => Array.from({ length: TOTAL_HOURS }, (_, i) => i), [])
 
   return (
-    <div className={cn('flex min-h-0 flex-col bg-[var(--color-paper)]', className)}>
+    <div className={cn('relative flex min-h-0 flex-col bg-[var(--color-paper)]', className)}>
+      {/* Nút zoom — chỉ hiện ở khung Tuần/Ngày (có onZoomChange), không ở sidebar. */}
+      {onZoomChange ? (
+        <div className="absolute right-3 bottom-3 z-30 flex items-center gap-0.5 rounded-full border border-[var(--color-rule-strong)] bg-[var(--color-paper-raised)] p-0.5 shadow-[0_2px_10px_rgba(0,0,0,0.14)]">
+          <ZoomButton
+            label={t('calendar.zoomOut')}
+            disabled={zoom <= 0.001}
+            onClick={() => onZoomChange(clampZoom(zoom - ZOOM_STEP))}
+          >
+            <path d="M5 10h10" />
+          </ZoomButton>
+          <ZoomButton
+            label={t('calendar.zoomIn')}
+            disabled={zoom >= 0.999}
+            onClick={() => onZoomChange(clampZoom(zoom + ZOOM_STEP))}
+          >
+            <path d="M10 5v10M5 10h10" />
+          </ZoomButton>
+        </div>
+      ) : null}
+
       {/* Một vùng cuộn duy nhất: tiêu đề sticky nên luôn thẳng hàng với lưới. */}
       <div ref={scrollRef} className="scroll-thin relative min-h-0 flex-1 overflow-y-auto">
         {/* Tiêu đề cột + dải cả ngày (dính trên cùng khi cuộn) */}
-        <div className="sticky top-0 z-20 bg-[var(--color-paper)]">
+        <div ref={headerRef} className="sticky top-0 z-20 bg-[var(--color-paper)]">
           {hasHeaders ? (
             <div className="flex border-b border-[var(--color-rule)]">
               <div
@@ -316,7 +386,7 @@ export function TimeGrid({ columns, onOpenEvent, onCreateRange, className }: Tim
         </div>
 
         {/* Lưới 24 giờ */}
-        <div className="flex" style={{ height: `${TOTAL_HOURS * HOUR_HEIGHT}px` }}>
+        <div className="flex" style={{ height: `${TOTAL_HOURS * hourHeight}px` }}>
           {/* Cột nhãn giờ — nhãn nằm đúng tâm đường kẻ */}
           <div
             className="relative shrink-0 border-t border-[var(--color-rule)]"
@@ -326,7 +396,7 @@ export function TimeGrid({ columns, onOpenEvent, onCreateRange, className }: Tim
               <div
                 key={hour}
                 className="absolute right-2 -translate-y-1/2 text-[10px] leading-none text-[var(--color-ink-faint)] select-none"
-                style={{ top: `${hour * HOUR_HEIGHT}px` }}
+                style={{ top: `${hour * hourHeight}px` }}
               >
                 <span className="tnum">{formatHourLabel(hour)}</span>
               </div>
@@ -354,11 +424,11 @@ export function TimeGrid({ columns, onOpenEvent, onCreateRange, className }: Tim
                   <div key={hour} className="pointer-events-none absolute inset-x-0">
                     <div
                       className="absolute inset-x-0 border-t border-[var(--color-rule)]"
-                      style={{ top: `${hour * HOUR_HEIGHT}px` }}
+                      style={{ top: `${hour * hourHeight}px` }}
                     />
                     <div
                       className="absolute inset-x-0 border-t border-dashed border-[var(--color-rule)] opacity-60"
-                      style={{ top: `${hour * HOUR_HEIGHT + HOUR_HEIGHT / 2}px` }}
+                      style={{ top: `${hour * hourHeight + hourHeight / 2}px` }}
                     />
                   </div>
                 ))}
@@ -376,13 +446,15 @@ export function TimeGrid({ columns, onOpenEvent, onCreateRange, className }: Tim
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={() => onOpenEvent(occ)}
                       className={cn(
-                        'absolute overflow-hidden rounded-[5px] px-1.5 py-[3px] text-left',
-                        'transition-shadow hover:shadow-[0_1px_4px_rgba(0,0,0,0.18)] hover:z-10',
+                        'absolute overflow-hidden rounded-[5px] px-1.5 text-left',
+                        'transition-shadow hover:z-10 hover:shadow-[0_1px_4px_rgba(0,0,0,0.18)]',
                         occ.status === 'done' && 'opacity-55',
                       )}
                       style={{
                         top: `${block.top + 1}px`,
-                        height: `${Math.max(block.height - 2, 18)}px`,
+                        height: `${Math.max(block.height - 2, 16)}px`,
+                        paddingTop: block.height > 26 ? 3 : 1,
+                        paddingBottom: block.height > 26 ? 3 : 1,
                         left: `calc(${block.col * width}% + 2px)`,
                         width: `calc(${width}% - 4px)`,
                         backgroundColor: `color-mix(in srgb, ${color} 18%, var(--color-paper-raised))`,
@@ -412,16 +484,18 @@ export function TimeGrid({ columns, onOpenEvent, onCreateRange, className }: Tim
                 {col.isToday ? (
                   <div
                     className="pointer-events-none absolute inset-x-0 z-10"
-                    style={{ top: `${(nowMinutes / 60) * HOUR_HEIGHT}px` }}
+                    style={{ top: `${(nowMinutes / 60) * hourHeight}px` }}
                   >
                     <div className="relative h-[2px] bg-[#ea4335]">
-                      <span className="absolute -left-[5px] -top-[4px] h-[10px] w-[10px] rounded-full bg-[#ea4335]" />
+                      <span className="absolute -top-[4px] -left-[5px] h-[10px] w-[10px] rounded-full bg-[#ea4335]" />
                     </div>
                   </div>
                 ) : null}
 
                 {/* Khối xem trước khi đang kéo chọn khoảng giờ */}
-                {drag && drag.dateString === col.dateString ? <DragPreview drag={drag} /> : null}
+                {drag && drag.dateString === col.dateString ? (
+                  <DragPreview drag={drag} hourHeight={hourHeight} />
+                ) : null}
               </div>
             )
           })}
@@ -431,8 +505,20 @@ export function TimeGrid({ columns, onOpenEvent, onCreateRange, className }: Tim
   )
 }
 
+/**
+ * Chiều cao một giờ theo mức zoom.
+ *  - zoom 1  -> MAX_HOUR_HEIGHT (kích thước mặc định, to nhất).
+ *  - zoom 0  -> vừa đủ để 24h nằm trọn trong khung nhìn (trừ header).
+ */
+function computeHourHeight(viewportH: number, headerH: number, zoom: number): number {
+  if (!viewportH) return MAX_HOUR_HEIGHT
+  const available = Math.max(viewportH - headerH, 0)
+  const min = Math.min(Math.max(available / TOTAL_HOURS, FLOOR_HOUR_HEIGHT), MAX_HOUR_HEIGHT)
+  return min + (MAX_HOUR_HEIGHT - min) * clampZoom(zoom)
+}
+
 /** Khối mờ hiển thị khoảng giờ đang kéo, kèm nhãn giờ đầu – cuối. */
-function DragPreview({ drag }: { drag: DragState }) {
+function DragPreview({ drag, hourHeight }: { drag: DragState; hourHeight: number }) {
   const low = Math.min(drag.startMinutes, drag.currentMinutes)
   const high = Math.max(drag.startMinutes, drag.currentMinutes)
   const end = high > low ? high : Math.min(low + 60, TOTAL_HOURS * 60)
@@ -441,14 +527,55 @@ function DragPreview({ drag }: { drag: DragState }) {
     <div
       className="pointer-events-none absolute inset-x-[2px] z-20 overflow-hidden rounded-[5px] border border-[var(--color-accent)] bg-[color-mix(in_srgb,var(--color-accent)_14%,var(--color-paper-raised))] px-1.5 py-[3px]"
       style={{
-        top: `${(low / 60) * HOUR_HEIGHT + 1}px`,
-        height: `${Math.max(((end - low) / 60) * HOUR_HEIGHT - 2, 18)}px`,
+        top: `${(low / 60) * hourHeight + 1}px`,
+        height: `${Math.max(((end - low) / 60) * hourHeight - 2, 16)}px`,
       }}
     >
       <span className="tnum block text-[10px] leading-[1.3] font-medium text-[var(--color-accent)]">
         {minutesToLabel(low)} – {minutesToLabel(end)}
       </span>
     </div>
+  )
+}
+
+/** Nút zoom tròn nhỏ (+ / -). */
+function ZoomButton({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string
+  disabled?: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className={cn(
+        'flex h-7 w-7 items-center justify-center rounded-full transition-colors',
+        'text-[var(--color-ink-soft)] hover:bg-[var(--color-paper-sunken)] hover:text-[var(--color-ink)]',
+        disabled && 'pointer-events-none opacity-30',
+      )}
+    >
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        aria-hidden="true"
+      >
+        {children}
+      </svg>
+    </button>
   )
 }
 

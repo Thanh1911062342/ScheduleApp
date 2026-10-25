@@ -88,6 +88,8 @@
     "hidden": "Hidden",
     "legendMore": "and {{count}} more",
     "allDayRow": "All day",
+    "zoomIn": "Zoom in timeline",
+    "zoomOut": "Zoom out timeline (fit whole day)",
     "timezoneLabel": "GMT+7"
   },
   "event": {

@@ -16,6 +16,7 @@ import { TimeGrid, type TimeGridColumn } from '@/components/calendar/TimeGrid'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/cn'
 import { formatTime, toDateString, weekDays, weekdayLongLabel } from '@/lib/date'
+import { useCalendarUi } from '@/stores/calendarUiStore'
 import type { Occurrence } from '@/types'
 
 interface WeekViewProps {
@@ -41,6 +42,8 @@ export function WeekView({
   const { t } = useTranslation()
   const days = weekDays(cursor, weekStart)
   const today = toDateString(new Date())
+  const zoom = useCalendarUi((s) => s.timelineZoom.week)
+  const setTimelineZoom = useCalendarUi((s) => s.setTimelineZoom)
 
   const columns = useMemo<TimeGridColumn[]>(
     () =>
@@ -91,6 +94,8 @@ export function WeekView({
       <TimeGrid
         columns={columns}
         onOpenEvent={onOpenEvent}
+        zoom={zoom}
+        onZoomChange={(z) => setTimelineZoom('week', z)}
         onCreateRange={(date, start, end) => {
           if (onCreateRange) onCreateRange(date, start, end)
           else onAddForDay(date)

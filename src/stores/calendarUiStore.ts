@@ -12,6 +12,9 @@ import type { Calendar, DateString, Occurrence, RecurrenceScope } from '@/types'
 
 export type ViewMode = 'month' | 'week' | 'day'
 
+/** Mức zoom timeline của khung Tuần / Ngày: 0 = trọn 24h, 1 = mặc định. */
+export type TimelineZoom = { week: number; day: number }
+
 /** Ngày đang được ấn-giữ hoặc đang trong tầm ngắm của con trỏ. */
 export interface EventDraft {
   startDate: DateString
@@ -69,6 +72,10 @@ interface CalendarUiState {
   // Tìm kiếm
   searchOpen: boolean
   setSearchOpen: (open: boolean) => void
+
+  // Zoom timeline (tuần / ngày, lưu riêng từng khung)
+  timelineZoom: TimelineZoom
+  setTimelineZoom: (view: 'week' | 'day', zoom: number) => void
 
   // Thông báo
   toasts: Toast[]
@@ -175,6 +182,12 @@ export const useCalendarUi = create<CalendarUiState>((set, get) => ({
 
   searchOpen: false,
   setSearchOpen: (open) => set({ searchOpen: open }),
+
+  timelineZoom: { week: 1, day: 1 },
+  setTimelineZoom: (view, zoom) =>
+    set((state) => ({
+      timelineZoom: { ...state.timelineZoom, [view]: Math.min(1, Math.max(0, zoom)) },
+    })),
 
   toasts: [],
   pushToast: (toast) => {

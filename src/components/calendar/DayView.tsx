@@ -8,6 +8,7 @@
 import { DayTimeline } from '@/components/calendar/DayTimeline'
 import { toDateString } from '@/lib/date'
 import { useAuthStore } from '@/stores/authStore'
+import { useCalendarUi } from '@/stores/calendarUiStore'
 import type { Occurrence } from '@/types'
 
 interface DayViewProps {
@@ -28,6 +29,8 @@ export function DayView({
   const dateString = toDateString(cursor)
   const items = occurrencesByDate.get(dateString) ?? []
   const weekStart = useAuthStore((s) => s.user?.week_start ?? 1)
+  const zoom = useCalendarUi((s) => s.timelineZoom.day)
+  const setTimelineZoom = useCalendarUi((s) => s.setTimelineZoom)
 
   return (
     <div className="flex min-h-0 flex-1 justify-center overflow-hidden">
@@ -38,6 +41,8 @@ export function DayView({
         onCreateRange={
           onCreateRange ? (start, end) => onCreateRange(dateString, start, end) : () => {}
         }
+        zoom={zoom}
+        onZoomChange={(z) => setTimelineZoom('day', z)}
         weekStart={weekStart}
         className="min-h-0 w-full max-w-2xl border-x border-[var(--color-rule)]"
       />

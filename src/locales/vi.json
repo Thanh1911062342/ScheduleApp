@@ -88,6 +88,8 @@
     "hidden": "Đang ẩn",
     "legendMore": "và {{count}} mục khác",
     "allDayRow": "Cả ngày",
+    "zoomIn": "Phóng to timeline",
+    "zoomOut": "Thu nhỏ timeline (xem trọn ngày)",
     "timezoneLabel": "GMT+7"
   },
   "event": {

@@ -21,6 +21,9 @@ interface DayTimelineProps {
   onOpenEvent: (occurrence: Occurrence) => void
   /** Mở form tạo lịch cho khoảng giờ [startMinutes, endMinutes) của ngày. */
   onCreateRange: (startMinutes: number, endMinutes: number) => void
+  /** Có zoom thì hiện nút +/-; sidebar ngày không truyền nên không hiện. */
+  zoom?: number
+  onZoomChange?: (zoom: number) => void
   weekStart?: number
   className?: string
 }
@@ -30,6 +33,8 @@ export function DayTimeline({
   occurrences,
   onOpenEvent,
   onCreateRange,
+  zoom,
+  onZoomChange,
   weekStart = 1,
   className,
 }: DayTimelineProps) {
@@ -63,6 +68,8 @@ export function DayTimeline({
     <TimeGrid
       columns={columns}
       onOpenEvent={onOpenEvent}
+      zoom={zoom}
+      onZoomChange={onZoomChange}
       onCreateRange={(_date, start, end) => onCreateRange(start, end)}
       className={className}
     />
