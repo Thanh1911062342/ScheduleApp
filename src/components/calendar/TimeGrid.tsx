@@ -8,10 +8,10 @@
  *    -> mở form với đúng khung giờ đã kéo, không phải chỉnh tay trong form.
  *
  * Cử chỉ trên KHỐI sự kiện (khi truyền `onCopyEventTo`):
- *  - Ctrl + giữ chuột PHẢI rồi kéo sang cột ngày khác -> sao chép
- *    nguyên trạng sự kiện (cùng khung giờ) sang ngày đích.
- *    Trong lúc kéo có khối "bóng mờ" xem trước ở cột đích, và menu
- *    chuột phải của trình duyệt bị chặn.
+ *  - Ctrl + giữ chuột PHẢI rồi kéo sang vị trí khác trong lưới ->
+ *    sao chép sự kiện tới đúng NGÀY + GIỜ thả chuột (bám nấc 30 phút,
+ *    không bắt buộc giữ khung giờ gốc). Trong lúc kéo có khối "bóng mờ"
+ *    xem trước ở vị trí đích, và menu chuột phải bị chặn.
  *
  * Zoom (chỉ bật khi truyền `onZoomChange`):
  *  - Mức to nhất = 52px/giờ (kích thước mặc định ban đầu).
@@ -60,8 +60,13 @@ interface TimeGridProps {
   zoom?: number
   /** Có mặt thì bật nút zoom; bỏ trống (sidebar ngày) thì không hiện. */
   onZoomChange?: (zoom: number) => void
-  /** Ctrl + chuột phải kéo khối sự kiện sang cột ngày khác -> sao chép. */
-  onCopyEventTo?: (occurrence: Occurrence, targetDateString: string) => void
+  /** Ctrl + chuột phải kéo khối sự kiện tới ngày/giờ khác -> sao chép.
+   * `startMinutes` = giờ bắt đầu mới (null với sự kiện cả ngày). */
+  onCopyEventTo?: (
+    occurrence: Occurrence,
+    targetDateString: string,
+    startMinutes: number | null,
+  ) => void
   className?: string
 }
 
@@ -89,10 +94,16 @@ interface DragState {
 interface CopyDragState {
   occurrence: Occurrence
   sourceDate: string
+  /** Giờ bắt đầu gốc của khối (phút), để biết drop tại chỗ thì bỏ qua. */
+  sourceStartMinutes: number
   /** Cột ngày con trỏ đang nằm trên; null khi kéo ra ngoài lưới. */
   targetDate: string | null
-  top: number
-  height: number
+  /** Giờ bắt đầu MỚI (đã snap 30 phút) tại cột đích; null khi ở ngoài lưới. */
+  targetStartMinutes: number | null
+  /** Thời lượng khối (phút) — giữ nguyên khi sao chép. */
+  durationMinutes: number
+  /** Con trỏ đang "cắm" vào phút thứ mấy của khối khi bắt đầu kéo. */
+  grabOffsetMinutes: number
   pointerId: number
 }
 
@@ -333,11 +344,17 @@ export function TimeGrid({
 
   // --- Kéo sao chép khối sự kiện (Ctrl + chuột phải) --------------------------
 
-  /** Tìm cột ngày (data-day-column) nằm dưới toạ độ con trỏ. */
-  function columnAtPoint(clientX: number, clientY: number): string | null {
+  /** Tìm phần tử cột ngày (data-day-column) nằm dưới toạ độ con trỏ. */
+  function columnElementAtPoint(clientX: number, clientY: number): HTMLElement | null {
     const el = document.elementFromPoint(clientX, clientY)
     const col = el?.closest('[data-day-column]')
-    return col instanceof HTMLElement ? (col.dataset.dayColumn ?? null) : null
+    return col instanceof HTMLElement ? col : null
+  }
+
+  /** Phút (đã snap 30') tại toạ độ con trỏ trong một cột ngày. */
+  function minutesInColumn(clientY: number, column: HTMLElement): number {
+    const rect = column.getBoundingClientRect()
+    return snapMinutes(((clientY - rect.top) / hourHeight) * 60)
   }
 
   function handleBlockPointerDown(
@@ -355,23 +372,52 @@ export function TimeGrid({
     } catch {
       // bỏ qua — vẫn kéo được, chỉ kém chính xác khi ra ngoài khối
     }
+    // Con trỏ "cắm" vào phút thứ mấy của khối — giữ nguyên khi kéo
+    // để bóng mờ không bị nhảy lên đầu khối.
+    const column = event.currentTarget.closest('[data-day-column]')
+    const grabOffsetMinutes = column
+      ? Math.max(0, minutesInColumn(event.clientY, column as HTMLElement) - block.startMinutes)
+      : 0
     setCopyDrag({
       occurrence: block.occurrence,
       sourceDate: block.occurrence.occurrence_date,
+      sourceStartMinutes: block.startMinutes,
       targetDate: null,
-      top: block.top,
-      height: block.height,
+      targetStartMinutes: null,
+      durationMinutes: Math.max(SNAP_MINUTES, block.endMinutes - block.startMinutes),
+      grabOffsetMinutes,
       pointerId: event.pointerId,
     })
   }
 
+  /** Vị trí đích (ngày + giờ bắt đầu mới) theo toạ độ con trỏ hiện tại. */
+  function resolveCopyTarget(clientX: number, clientY: number): {
+    date: string
+    startMinutes: number
+  } | null {
+    const column = columnElementAtPoint(clientX, clientY)
+    if (!column) return null
+    const date = column.dataset.dayColumn
+    if (!date) return null
+    if (!copyDrag) return null
+    const raw = minutesInColumn(clientY, column) - copyDrag.grabOffsetMinutes
+    const startMinutes = Math.min(
+      TOTAL_HOURS * 60 - SNAP_MINUTES,
+      Math.max(0, snapMinutes(raw)),
+    )
+    return { date, startMinutes }
+  }
+
   function handleBlockPointerMove(event: React.PointerEvent<HTMLButtonElement>) {
     if (!copyDrag || event.pointerId !== copyDrag.pointerId) return
-    const hovered = columnAtPoint(event.clientX, event.clientY)
-    const target = hovered && hovered !== copyDrag.sourceDate ? hovered : null
-    setCopyDrag((prev) =>
-      prev && prev.targetDate !== target ? { ...prev, targetDate: target } : prev,
-    )
+    const target = resolveCopyTarget(event.clientX, event.clientY)
+    setCopyDrag((prev) => {
+      if (!prev) return prev
+      const date = target?.date ?? null
+      const start = target?.startMinutes ?? null
+      if (date === prev.targetDate && start === prev.targetStartMinutes) return prev
+      return { ...prev, targetDate: date, targetStartMinutes: start }
+    })
   }
 
   function endCopyDrag() {
@@ -384,15 +430,21 @@ export function TimeGrid({
 
   function handleBlockPointerUp(event: React.PointerEvent<HTMLButtonElement>) {
     if (!copyDrag || event.pointerId !== copyDrag.pointerId) return
-    const { occurrence, sourceDate } = copyDrag
-    const target = columnAtPoint(event.clientX, event.clientY)
+    const { occurrence, sourceDate, sourceStartMinutes } = copyDrag
+    const target = resolveCopyTarget(event.clientX, event.clientY)
     try {
       event.currentTarget.releasePointerCapture(event.pointerId)
     } catch {
       // capture có thể đã tự nhả
     }
     endCopyDrag()
-    if (target && target !== sourceDate) onCopyEventTo?.(occurrence, target)
+    // Bỏ qua nếu thả về đúng chỗ cũ (không ngày mới, không giờ mới).
+    const unchanged =
+      !target ||
+      (target.date === sourceDate && target.startMinutes === sourceStartMinutes)
+    if (!unchanged && target) {
+      onCopyEventTo?.(occurrence, target.date, target.startMinutes)
+    }
   }
 
   function handleBlockPointerCancel(event: React.PointerEvent<HTMLButtonElement>) {
@@ -622,9 +674,11 @@ export function TimeGrid({
                   <DragPreview drag={drag} hourHeight={hourHeight} />
                 ) : null}
 
-                {/* "Bóng mờ" của sự kiện đang được kéo sao chép sang cột này */}
-                {copyDrag && copyDrag.targetDate === col.dateString ? (
-                  <CopyGhost copyDrag={copyDrag} />
+                {/* "Bóng mờ" của sự kiện đang được kéo sao chép sang vị trí này */}
+                {copyDrag &&
+                copyDrag.targetDate === col.dateString &&
+                copyDrag.targetStartMinutes != null ? (
+                  <CopyGhost copyDrag={copyDrag} hourHeight={hourHeight} />
                 ) : null}
               </div>
             )
@@ -668,15 +722,23 @@ function DragPreview({ drag, hourHeight }: { drag: DragState; hourHeight: number
   )
 }
 
-/** "Bóng mờ" của khối sự kiện đang được Ctrl+chuột phải kéo sang ngày khác. */
-function CopyGhost({ copyDrag }: { copyDrag: CopyDragState }) {
+/** "Bóng mờ" của khối sự kiện đang được Ctrl+chuột phải kéo sang vị trí mới. */
+function CopyGhost({
+  copyDrag,
+  hourHeight,
+}: {
+  copyDrag: CopyDragState
+  hourHeight: number
+}) {
   const color = copyDrag.occurrence.color ?? copyDrag.occurrence.calendar.color
+  const start = copyDrag.targetStartMinutes ?? 0
+  const end = Math.min(start + copyDrag.durationMinutes, TOTAL_HOURS * 60)
   return (
     <div
       className="pointer-events-none absolute inset-x-[2px] z-20 overflow-hidden rounded-[5px] border border-dashed px-1.5 py-[3px]"
       style={{
-        top: `${copyDrag.top + 1}px`,
-        height: `${Math.max(copyDrag.height - 2, 16)}px`,
+        top: `${(start / 60) * hourHeight + 1}px`,
+        height: `${Math.max(((end - start) / 60) * hourHeight - 2, 16)}px`,
         borderColor: color,
         backgroundColor: `color-mix(in srgb, ${color} 14%, var(--color-paper-raised))`,
         color: `color-mix(in srgb, ${color} 55%, var(--color-ink))`,
@@ -684,6 +746,9 @@ function CopyGhost({ copyDrag }: { copyDrag: CopyDragState }) {
     >
       <span className="block truncate text-[11px] leading-[1.3] font-medium">
         {copyDrag.occurrence.title}
+      </span>
+      <span className="tnum block truncate text-[10px] leading-[1.3] opacity-80">
+        {minutesToLabel(start)} – {minutesToLabel(end)}
       </span>
     </div>
   )

@@ -172,7 +172,7 @@
     "hintHold": "Ấn giữ để thêm lịch",
     "hintDrag": "Kéo để chọn nhiều ngày",
     "timelineHint": "Bấm hoặc kéo chọn khoảng giờ để thêm lịch",
-    "copyDragHint": "Ctrl + giữ chuột phải và kéo sang ngày khác để sao chép"
+    "copyDragHint": "Ctrl + giữ chuột phải và kéo sang ngày/giờ khác để sao chép"
   },
   "search": {
     "title": "Tìm kiếm",

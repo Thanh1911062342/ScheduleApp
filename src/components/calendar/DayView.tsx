@@ -18,8 +18,12 @@ interface DayViewProps {
   onAddForDay: (date: string) => void
   /** Mở form tạo lịch cho khoảng giờ đã bấm/kéo trên timeline. */
   onCreateRange?: (date: string, startMinutes: number, endMinutes: number) => void
-  /** Ctrl + chuột phải kéo khối sự kiện sang ngày khác -> sao chép. */
-  onCopyEventTo?: (occurrence: Occurrence, targetDateString: string) => void
+  /** Ctrl + chuột phải kéo khối sự kiện tới ngày/giờ khác -> sao chép. */
+  onCopyEventTo?: (
+    occurrence: Occurrence,
+    targetDateString: string,
+    startMinutes: number | null,
+  ) => void
 }
 
 export function DayView({

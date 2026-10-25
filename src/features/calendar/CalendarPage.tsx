@@ -25,7 +25,9 @@ import {
   monthGridRange,
   monthRange,
   normalizeRange,
+  timeToMinutes,
   toDateString,
+  toTimeString,
   weekDays,
 } from '@/lib/date'
 import { translateApiError } from '@/lib/errors'
@@ -33,8 +35,16 @@ import { eventsApi } from '@/lib/api'
 import { useCalendars, useOccurrences, useOccurrencesByDate } from '@/lib/hooks'
 import { useAuthStore } from '@/stores/authStore'
 import { useCalendarUi } from '@/stores/calendarUiStore'
-import type { Occurrence } from '@/types'
+import type { Occurrence, TimeString } from '@/types'
 import { useQueryClient } from '@tanstack/react-query'
+
+/** Số phút trong ngày -> chuỗi giờ `HH:mm:00` gửi lên backend. */
+function minutesToTimeString(minutes: number): TimeString {
+  const clamped = Math.min(24 * 60 - 1, Math.max(0, minutes))
+  const h = Math.floor(clamped / 60)
+  const m = clamped % 60
+  return toTimeString(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
+}
 
 export function CalendarPage() {
   const user = useAuthStore((s) => s.user)
@@ -152,13 +162,18 @@ export function CalendarPage() {
   }
 
   /**
-   * Sao chép sự kiện sang ngày khác — kích hoạt bằng Ctrl + giữ chuột phải
-   * rồi kéo khối sự kiện trên timeline sang cột ngày đích.
+   * Sao chép sự kiện sang ngày/giờ khác — kích hoạt bằng Ctrl + giữ chuột
+   * phải rồi kéo khối sự kiện trên timeline tới vị trí đích (bất kỳ cột
+   * ngày nào, bất kỳ khung giờ nào, bám nấc 30 phút).
    *
-   * Lấy chi tiết sự kiện gốc (để chép cả checklist), dịch ngày đi đúng số
-   * ngày kéo (sự kiện nhiều ngày vẫn giữ nguyên độ dài), rồi tạo bản mới.
+   * Lấy chi tiết sự kiện gốc (để chép cả checklist), giữ nguyên thời lượng,
+   * dịch ngày/giờ bắt đầu theo chỗ thả rồi tạo bản mới.
    */
-  async function handleCopyEventTo(occurrence: Occurrence, targetDate: string) {
+  async function handleCopyEventTo(
+    occurrence: Occurrence,
+    targetDate: string,
+    startMinutes: number | null,
+  ) {
     const dayDelta = differenceInCalendarDays(
       fromDateString(targetDate),
       fromDateString(occurrence.occurrence_date),
@@ -167,13 +182,26 @@ export function CalendarPage() {
       const source = await eventsApi.get(occurrence.event_id)
       const startDate = toDateString(addDays(fromDateString(source.start_date), dayDelta))
       const endDate = toDateString(addDays(fromDateString(source.end_date), dayDelta))
+
+      // Sự kiện có giờ + đích có giờ cụ thể: dịch giờ bắt đầu, giữ thời lượng.
+      let startTime = source.start_time
+      let endTime = source.end_time
+      if (!source.is_all_day && startMinutes != null && source.start_time) {
+        const sourceStart = timeToMinutes(source.start_time) ?? 0
+        const sourceEnd = timeToMinutes(source.end_time) ?? sourceStart + 60
+        const newStart = startMinutes
+        const newEnd = newStart + Math.max(30, sourceEnd - sourceStart)
+        startTime = minutesToTimeString(newStart)
+        endTime = minutesToTimeString(newEnd)
+      }
+
       await eventsApi.create({
         title: source.title,
         start_date: startDate,
         end_date: endDate,
         is_all_day: source.is_all_day,
-        start_time: source.start_time,
-        end_time: source.end_time,
+        start_time: startTime,
+        end_time: endTime,
         calendar_id: source.calendar_id,
         description: source.description,
         location: source.location,

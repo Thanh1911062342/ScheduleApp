@@ -24,8 +24,12 @@ interface DayTimelineProps {
   /** Có zoom thì hiện nút +/-; sidebar ngày không truyền nên không hiện. */
   zoom?: number
   onZoomChange?: (zoom: number) => void
-  /** Ctrl + chuột phải kéo khối sự kiện sang cột ngày khác -> sao chép. */
-  onCopyEventTo?: (occurrence: Occurrence, targetDateString: string) => void
+  /** Ctrl + chuột phải kéo khối sự kiện tới ngày/giờ khác -> sao chép. */
+  onCopyEventTo?: (
+    occurrence: Occurrence,
+    targetDateString: string,
+    startMinutes: number | null,
+  ) => void
   weekStart?: number
   className?: string
 }
