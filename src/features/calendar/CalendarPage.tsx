@@ -6,6 +6,8 @@
  */
 
 import { useEffect, useMemo } from 'react'
+import { addDays, differenceInCalendarDays } from 'date-fns'
+import { useTranslation } from 'react-i18next'
 
 import { BulkCreatePopup } from '@/components/calendar/BulkCreatePopup'
 import { DayPanel } from '@/components/calendar/DayPanel'
@@ -18,18 +20,26 @@ import { WeekView } from '@/components/calendar/WeekView'
 import { EventForm } from '@/components/event/EventForm'
 import { Button } from '@/components/ui/Button'
 import {
+  formatFullDate,
+  fromDateString,
   monthGridRange,
   monthRange,
   normalizeRange,
   toDateString,
   weekDays,
 } from '@/lib/date'
+import { translateApiError } from '@/lib/errors'
+import { eventsApi } from '@/lib/api'
 import { useCalendars, useOccurrences, useOccurrencesByDate } from '@/lib/hooks'
 import { useAuthStore } from '@/stores/authStore'
 import { useCalendarUi } from '@/stores/calendarUiStore'
+import type { Occurrence } from '@/types'
+import { useQueryClient } from '@tanstack/react-query'
 
 export function CalendarPage() {
   const user = useAuthStore((s) => s.user)
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
   const {
     cursor,
     view,
@@ -46,6 +56,7 @@ export function CalendarPage() {
     setSelection,
     setSearchOpen,
     syncCalendars,
+    pushToast,
   } = useCalendarUi()
 
   const calendarsQuery = useCalendars()
@@ -140,6 +151,45 @@ export function CalendarPage() {
     setSelection({ start: startDate, end: endDate })
   }
 
+  /**
+   * Sao chép sự kiện sang ngày khác — kích hoạt bằng Ctrl + giữ chuột phải
+   * rồi kéo khối sự kiện trên timeline sang cột ngày đích.
+   *
+   * Lấy chi tiết sự kiện gốc (để chép cả checklist), dịch ngày đi đúng số
+   * ngày kéo (sự kiện nhiều ngày vẫn giữ nguyên độ dài), rồi tạo bản mới.
+   */
+  async function handleCopyEventTo(occurrence: Occurrence, targetDate: string) {
+    const dayDelta = differenceInCalendarDays(
+      fromDateString(targetDate),
+      fromDateString(occurrence.occurrence_date),
+    )
+    try {
+      const source = await eventsApi.get(occurrence.event_id)
+      const startDate = toDateString(addDays(fromDateString(source.start_date), dayDelta))
+      const endDate = toDateString(addDays(fromDateString(source.end_date), dayDelta))
+      await eventsApi.create({
+        title: source.title,
+        start_date: startDate,
+        end_date: endDate,
+        is_all_day: source.is_all_day,
+        start_time: source.start_time,
+        end_time: source.end_time,
+        calendar_id: source.calendar_id,
+        description: source.description,
+        location: source.location,
+        color: source.color,
+        checklist: source.checklist.map((item) => item.content),
+      })
+      void queryClient.invalidateQueries({ queryKey: ['events'] })
+      pushToast({
+        messageKey: 'event.copied',
+        params: { date: formatFullDate(targetDate) },
+      })
+    } catch (err) {
+      pushToast({ messageKey: translateApiError(err, t), tone: 'danger' })
+    }
+  }
+
   return (
     <div className="flex h-dvh flex-col bg-[var(--color-paper)]">
       <TopBar calendars={calendars} />
@@ -176,6 +226,7 @@ export function CalendarPage() {
               onOpenEvent={openEdit}
               onAddForDay={openCreate}
               onCreateRange={openCreateRange}
+              onCopyEventTo={handleCopyEventTo}
             />
           ) : (
             <DayView
@@ -184,6 +235,7 @@ export function CalendarPage() {
               onOpenEvent={openEdit}
               onAddForDay={openCreate}
               onCreateRange={openCreateRange}
+              onCopyEventTo={handleCopyEventTo}
             />
           )}
         </main>

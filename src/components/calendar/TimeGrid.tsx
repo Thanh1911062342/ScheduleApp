@@ -7,6 +7,12 @@
  *  - Ấn-giữ rồi KÉO từ ô này sang ô khác (ví dụ 8 AM xuống 12 PM)
  *    -> mở form với đúng khung giờ đã kéo, không phải chỉnh tay trong form.
  *
+ * Cử chỉ trên KHỐI sự kiện (khi truyền `onCopyEventTo`):
+ *  - Ctrl + giữ chuột PHẢI rồi kéo sang cột ngày khác -> sao chép
+ *    nguyên trạng sự kiện (cùng khung giờ) sang ngày đích.
+ *    Trong lúc kéo có khối "bóng mờ" xem trước ở cột đích, và menu
+ *    chuột phải của trình duyệt bị chặn.
+ *
  * Zoom (chỉ bật khi truyền `onZoomChange`):
  *  - Mức to nhất = 52px/giờ (kích thước mặc định ban đầu).
  *  - Mức nhỏ nhất = vừa khít để nhìn trọn 24h trong khung hiện tại,
@@ -54,6 +60,8 @@ interface TimeGridProps {
   zoom?: number
   /** Có mặt thì bật nút zoom; bỏ trống (sidebar ngày) thì không hiện. */
   onZoomChange?: (zoom: number) => void
+  /** Ctrl + chuột phải kéo khối sự kiện sang cột ngày khác -> sao chép. */
+  onCopyEventTo?: (occurrence: Occurrence, targetDateString: string) => void
   className?: string
 }
 
@@ -75,6 +83,17 @@ interface DragState {
   dateString: string
   startMinutes: number
   currentMinutes: number
+}
+
+/** Trạng thái kéo sao chép khối sự kiện (Ctrl + chuột phải). */
+interface CopyDragState {
+  occurrence: Occurrence
+  sourceDate: string
+  /** Cột ngày con trỏ đang nằm trên; null khi kéo ra ngoài lưới. */
+  targetDate: string | null
+  top: number
+  height: number
+  pointerId: number
 }
 
 function clampZoom(zoom: number): number {
@@ -188,12 +207,27 @@ export function TimeGrid({
   onCreateRange,
   zoom = 1,
   onZoomChange,
+  onCopyEventTo,
   className,
 }: TimeGridProps) {
   const { t } = useTranslation()
   const scrollRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
+  const [copyDrag, setCopyDrag] = useState<CopyDragState | null>(null)
+  /**
+   * Chặn menu chuột phải của trình duyệt trong lúc đang kéo sao chép.
+   * `contextmenu` bắn ra SAU `pointerup` (React đã gỡ listener), nên phải
+   * chặn ở cấp window bằng ref, và giữ thêm một nhịp sau khi thả.
+   */
+  const suppressCtxRef = useRef(false)
+  useEffect(() => {
+    function onContextMenu(event: MouseEvent) {
+      if (suppressCtxRef.current) event.preventDefault()
+    }
+    window.addEventListener('contextmenu', onContextMenu, true)
+    return () => window.removeEventListener('contextmenu', onContextMenu, true)
+  }, [])
 
   // Đo chiều cao khung nhìn + header để tính mức zoom nhỏ nhất (trọn 24h).
   const [viewportH, setViewportH] = useState(0)
@@ -295,6 +329,75 @@ export function TimeGrid({
     } else {
       onCreateRange(dateString, low, high)
     }
+  }
+
+  // --- Kéo sao chép khối sự kiện (Ctrl + chuột phải) --------------------------
+
+  /** Tìm cột ngày (data-day-column) nằm dưới toạ độ con trỏ. */
+  function columnAtPoint(clientX: number, clientY: number): string | null {
+    const el = document.elementFromPoint(clientX, clientY)
+    const col = el?.closest('[data-day-column]')
+    return col instanceof HTMLElement ? (col.dataset.dayColumn ?? null) : null
+  }
+
+  function handleBlockPointerDown(
+    event: React.PointerEvent<HTMLButtonElement>,
+    block: PlacedBlock,
+  ) {
+    const isCopyGesture =
+      event.pointerType === 'mouse' && event.button === 2 && event.ctrlKey
+    if (!isCopyGesture || !onCopyEventTo) return
+    event.preventDefault()
+    event.stopPropagation()
+    suppressCtxRef.current = true
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      // bỏ qua — vẫn kéo được, chỉ kém chính xác khi ra ngoài khối
+    }
+    setCopyDrag({
+      occurrence: block.occurrence,
+      sourceDate: block.occurrence.occurrence_date,
+      targetDate: null,
+      top: block.top,
+      height: block.height,
+      pointerId: event.pointerId,
+    })
+  }
+
+  function handleBlockPointerMove(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!copyDrag || event.pointerId !== copyDrag.pointerId) return
+    const hovered = columnAtPoint(event.clientX, event.clientY)
+    const target = hovered && hovered !== copyDrag.sourceDate ? hovered : null
+    setCopyDrag((prev) =>
+      prev && prev.targetDate !== target ? { ...prev, targetDate: target } : prev,
+    )
+  }
+
+  function endCopyDrag() {
+    setCopyDrag(null)
+    // contextmenu bắn sau pointerup — giữ chặn thêm một nhịp rồi mới nhả.
+    window.setTimeout(() => {
+      suppressCtxRef.current = false
+    }, 350)
+  }
+
+  function handleBlockPointerUp(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!copyDrag || event.pointerId !== copyDrag.pointerId) return
+    const { occurrence, sourceDate } = copyDrag
+    const target = columnAtPoint(event.clientX, event.clientY)
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    } catch {
+      // capture có thể đã tự nhả
+    }
+    endCopyDrag()
+    if (target && target !== sourceDate) onCopyEventTo?.(occurrence, target)
+  }
+
+  function handleBlockPointerCancel(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!copyDrag || event.pointerId !== copyDrag.pointerId) return
+    endCopyDrag()
   }
 
   const hours = useMemo(() => Array.from({ length: TOTAL_HOURS }, (_, i) => i), [])
@@ -409,11 +512,15 @@ export function TimeGrid({
             return (
               <div
                 key={col.dateString}
+                data-day-column={col.dateString}
                 className={cn(
                   'relative min-w-0 flex-1 border-t border-l border-[var(--color-rule)] touch-pan-y select-none',
                   col.isToday && 'bg-[color-mix(in_srgb,var(--color-accent)_4%,transparent)]',
+                  copyDrag && copyDrag.targetDate === col.dateString &&
+                    'bg-[color-mix(in_srgb,var(--color-accent)_8%,transparent)]',
                 )}
                 title={t('day.timelineHint')}
+                onContextMenu={(e) => e.preventDefault()}
                 onPointerDown={(e) => handlePointerDown(e, col.dateString)}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
@@ -438,17 +545,35 @@ export function TimeGrid({
                   const occ = block.occurrence
                   const color = occ.color ?? occ.calendar.color
                   const width = 100 / block.cols
+                  const isCopySource =
+                    copyDrag != null && copyDrag.occurrence.occurrence_key === occ.occurrence_key
                   return (
                     <button
                       key={occ.occurrence_key}
                       type="button"
                       data-event-block
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={() => onOpenEvent(occ)}
+                      onPointerDown={(e) => {
+                        e.stopPropagation()
+                        handleBlockPointerDown(e, block)
+                      }}
+                      onPointerMove={handleBlockPointerMove}
+                      onPointerUp={handleBlockPointerUp}
+                      onPointerCancel={handleBlockPointerCancel}
+                      onContextMenu={(e) => e.preventDefault()}
+                      onClick={() => {
+                        if (suppressCtxRef.current) return
+                        onOpenEvent(occ)
+                      }}
+                      title={
+                        onCopyEventTo
+                          ? `${t('day.copyDragHint')}`
+                          : undefined
+                      }
                       className={cn(
                         'absolute overflow-hidden rounded-[5px] px-1.5 text-left',
                         'transition-shadow hover:z-10 hover:shadow-[0_1px_4px_rgba(0,0,0,0.18)]',
                         occ.status === 'done' && 'opacity-55',
+                        isCopySource && 'opacity-40 ring-2 ring-[var(--color-accent)]',
                       )}
                       style={{
                         top: `${block.top + 1}px`,
@@ -496,6 +621,11 @@ export function TimeGrid({
                 {drag && drag.dateString === col.dateString ? (
                   <DragPreview drag={drag} hourHeight={hourHeight} />
                 ) : null}
+
+                {/* "Bóng mờ" của sự kiện đang được kéo sao chép sang cột này */}
+                {copyDrag && copyDrag.targetDate === col.dateString ? (
+                  <CopyGhost copyDrag={copyDrag} />
+                ) : null}
               </div>
             )
           })}
@@ -533,6 +663,27 @@ function DragPreview({ drag, hourHeight }: { drag: DragState; hourHeight: number
     >
       <span className="tnum block text-[10px] leading-[1.3] font-medium text-[var(--color-accent)]">
         {minutesToLabel(low)} – {minutesToLabel(end)}
+      </span>
+    </div>
+  )
+}
+
+/** "Bóng mờ" của khối sự kiện đang được Ctrl+chuột phải kéo sang ngày khác. */
+function CopyGhost({ copyDrag }: { copyDrag: CopyDragState }) {
+  const color = copyDrag.occurrence.color ?? copyDrag.occurrence.calendar.color
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-[2px] z-20 overflow-hidden rounded-[5px] border border-dashed px-1.5 py-[3px]"
+      style={{
+        top: `${copyDrag.top + 1}px`,
+        height: `${Math.max(copyDrag.height - 2, 16)}px`,
+        borderColor: color,
+        backgroundColor: `color-mix(in srgb, ${color} 14%, var(--color-paper-raised))`,
+        color: `color-mix(in srgb, ${color} 55%, var(--color-ink))`,
+      }}
+    >
+      <span className="block truncate text-[11px] leading-[1.3] font-medium">
+        {copyDrag.occurrence.title}
       </span>
     </div>
   )

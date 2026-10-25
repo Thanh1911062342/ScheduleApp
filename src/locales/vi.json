@@ -143,6 +143,7 @@
     "scopeAll": "Tất cả các lần",
     "created": "Đã tạo lịch",
     "updated": "Đã cập nhật",
+    "copied": "Đã sao chép sang {{date}}",
     "createdCount": "Đã tạo {{count}} lịch",
     "empty": "Chưa có gì",
     "emptyHint": "Ấn giữ một ngày để thêm lịch",
@@ -170,7 +171,8 @@
     "hintClick": "Chạm để xem",
     "hintHold": "Ấn giữ để thêm lịch",
     "hintDrag": "Kéo để chọn nhiều ngày",
-    "timelineHint": "Bấm hoặc kéo chọn khoảng giờ để thêm lịch"
+    "timelineHint": "Bấm hoặc kéo chọn khoảng giờ để thêm lịch",
+    "copyDragHint": "Ctrl + giữ chuột phải và kéo sang ngày khác để sao chép"
   },
   "search": {
     "title": "Tìm kiếm",

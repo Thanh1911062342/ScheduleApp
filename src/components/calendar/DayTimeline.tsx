@@ -24,6 +24,8 @@ interface DayTimelineProps {
   /** Có zoom thì hiện nút +/-; sidebar ngày không truyền nên không hiện. */
   zoom?: number
   onZoomChange?: (zoom: number) => void
+  /** Ctrl + chuột phải kéo khối sự kiện sang cột ngày khác -> sao chép. */
+  onCopyEventTo?: (occurrence: Occurrence, targetDateString: string) => void
   weekStart?: number
   className?: string
 }
@@ -35,6 +37,7 @@ export function DayTimeline({
   onCreateRange,
   zoom,
   onZoomChange,
+  onCopyEventTo,
   weekStart = 1,
   className,
 }: DayTimelineProps) {
@@ -70,6 +73,7 @@ export function DayTimeline({
       onOpenEvent={onOpenEvent}
       zoom={zoom}
       onZoomChange={onZoomChange}
+      onCopyEventTo={onCopyEventTo}
       onCreateRange={(_date, start, end) => onCreateRange(start, end)}
       className={className}
     />

@@ -28,6 +28,8 @@ interface WeekViewProps {
   onAddForDay: (date: string) => void
   /** Mở form tạo lịch cho khoảng giờ đã bấm/kéo trên lưới tuần. */
   onCreateRange?: (date: string, startMinutes: number, endMinutes: number) => void
+  /** Ctrl + chuột phải kéo khối sự kiện sang ngày khác -> sao chép. */
+  onCopyEventTo?: (occurrence: Occurrence, targetDateString: string) => void
 }
 
 export function WeekView({
@@ -38,6 +40,7 @@ export function WeekView({
   onOpenEvent,
   onAddForDay,
   onCreateRange,
+  onCopyEventTo,
 }: WeekViewProps) {
   const { t } = useTranslation()
   const days = weekDays(cursor, weekStart)
@@ -100,6 +103,7 @@ export function WeekView({
           if (onCreateRange) onCreateRange(date, start, end)
           else onAddForDay(date)
         }}
+        onCopyEventTo={onCopyEventTo}
         className="hidden min-h-0 flex-1 border-l border-[var(--color-rule)] md:flex"
       />
 

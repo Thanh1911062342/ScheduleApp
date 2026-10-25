@@ -18,6 +18,8 @@ interface DayViewProps {
   onAddForDay: (date: string) => void
   /** Mở form tạo lịch cho khoảng giờ đã bấm/kéo trên timeline. */
   onCreateRange?: (date: string, startMinutes: number, endMinutes: number) => void
+  /** Ctrl + chuột phải kéo khối sự kiện sang ngày khác -> sao chép. */
+  onCopyEventTo?: (occurrence: Occurrence, targetDateString: string) => void
 }
 
 export function DayView({
@@ -25,6 +27,7 @@ export function DayView({
   occurrencesByDate,
   onOpenEvent,
   onCreateRange,
+  onCopyEventTo,
 }: DayViewProps) {
   const dateString = toDateString(cursor)
   const items = occurrencesByDate.get(dateString) ?? []
@@ -43,6 +46,7 @@ export function DayView({
         }
         zoom={zoom}
         onZoomChange={(z) => setTimelineZoom('day', z)}
+        onCopyEventTo={onCopyEventTo}
         weekStart={weekStart}
         className="min-h-0 w-full max-w-2xl border-x border-[var(--color-rule)]"
       />

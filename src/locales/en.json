@@ -143,6 +143,7 @@
     "scopeAll": "All occurrences",
     "created": "Event created",
     "updated": "Event updated",
+    "copied": "Copied to {{date}}",
     "createdCount": "Created {{count}} events",
     "empty": "Nothing here yet",
     "emptyHint": "Press and hold a day to add an event",
@@ -170,7 +171,8 @@
     "hintClick": "Tap to view",
     "hintHold": "Press and hold to add",
     "hintDrag": "Drag to select days",
-    "timelineHint": "Click or drag a time range to add an event"
+    "timelineHint": "Click or drag a time range to add an event",
+    "copyDragHint": "Ctrl + right-click and drag to another day to copy"
   },
   "search": {
     "title": "Search",
